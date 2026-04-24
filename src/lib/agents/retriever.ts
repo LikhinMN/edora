@@ -1,15 +1,5 @@
 import type { EdoraState } from "../types";
-import type { MemoryVectorStore } from "@langchain/classic/vectorstores/memory";
-
-declare global {
-  var __edoraSessionVectorStores:
-    | Map<string, MemoryVectorStore>
-    | undefined;
-}
-
-function getSessionVectorStore(sessionId: string): MemoryVectorStore | undefined {
-  return globalThis.__edoraSessionVectorStores?.get(sessionId);
-}
+import { sessionVectorStoreRegistry } from "../rag/vector-store-registry";
 
 const DEFAULT_RETRIEVAL_K = 5;
 
@@ -27,7 +17,7 @@ export async function retriever(state: EdoraState): Promise<EdoraState> {
     };
   }
 
-  const vectorStore = getSessionVectorStore(sessionId);
+  const vectorStore = sessionVectorStoreRegistry.getSessionVectorStore(sessionId);
   if (!vectorStore) {
     return {
       ...state,
