@@ -2,6 +2,7 @@ import { WebPDFLoader as PDFLoader } from "@langchain/community/document_loaders
 import { RecursiveCharacterTextSplitter } from "@langchain/classic/text_splitter";
 import { MemoryVectorStore } from "@langchain/classic/vectorstores/memory";
 import { OllamaEmbeddings } from "@langchain/ollama";
+import { registerSessionVectorStore } from "#/lib/rag/vector-store-registry";
 
 type PdfBuffer = ArrayBuffer | Uint8Array | Blob;
 
@@ -49,6 +50,7 @@ export async function ingestPdf(
   const vectorStore = new MemoryVectorStore(embeddings);
 
   await vectorStore.addDocuments(chunkedDocuments);
+  registerSessionVectorStore(sessionId, vectorStore);
 
   return vectorStore;
 }

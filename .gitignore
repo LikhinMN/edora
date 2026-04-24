@@ -11,5 +11,6 @@ dist-ssr
 .vinxi
 __unconfig*
 todos.json
-.vscode
+.agents
 .idea
+.vscode
