@@ -7,15 +7,12 @@
   "tailwind": true,
   "addOnOptions": {},
   "envVarValues": {},
-  "git": true,
+  "git": false,
   "install": true,
   "routerOnly": false,
   "version": 1,
   "framework": "react",
   "chosenAddOns": [
-    "eslint",
-    "railway",
-    "shadcn",
-    "tanstack-query"
+    "eslint"
   ]
 }
