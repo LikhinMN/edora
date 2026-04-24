@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSupervisorDecision } from "./supervisor";
+import { parseSupervisorDecision } from "#/lib/agents/supervisor";
 
 describe("parseSupervisorDecision", () => {
   it("parses strict JSON output", () => {
