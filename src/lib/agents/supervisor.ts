@@ -25,7 +25,7 @@ const ROUTE_SYNONYMS: Record<string, SupervisorRoute> = {
   direct: "answer",
 };
 
-const llm = new ChatOllama({ model: "llama3.2:3b", temperature: 0 });
+const llm = new ChatOllama({ model: 'gemma4:e4b', temperature: 0 })
 
 function isSupervisorRoute(value: string): value is SupervisorRoute {
   return SUPERVISOR_ROUTES.includes(value as SupervisorRoute);
