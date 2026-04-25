@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { graph } from "#/lib/graph";
 import type { EdoraState } from "#/lib/types";
 
 function badRequest(message: string): Response {
@@ -24,6 +23,7 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const { graph } = await import("#/lib/graph");
         const contentType = request.headers.get("content-type") ?? "";
         if (!contentType.toLowerCase().includes("application/json")) {
           return badRequest("Content-Type must be application/json");
@@ -52,7 +52,7 @@ export const Route = createFileRoute("/api/chat")({
 
         try {
           const initialState = buildInitialState(question.trim(), sessionId.trim());
-          const finalState = (await graph.invoke(initialState)) as EdoraState;
+          const finalState = await graph.invoke(initialState);
 
           return Response.json({
             answer: finalState.answer,
@@ -68,4 +68,3 @@ export const Route = createFileRoute("/api/chat")({
     },
   },
 });
-

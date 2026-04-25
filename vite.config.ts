@@ -8,6 +8,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  optimizeDeps: {
+    exclude: ['@langchain/community', 'pdf-parse'],
+  },
   plugins: [devtools(), tailwindcss(), tanstackStart(), viteReact()],
 })
 

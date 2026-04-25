@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ingestPdf } from "#/lib/rag/ingest";
 
 const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d] as const;
 
@@ -15,6 +14,7 @@ export const Route = createFileRoute("/api/upload")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const { ingestPdf } = await import("#/lib/rag/ingest");
         const contentType = request.headers.get("content-type") ?? "";
         if (!contentType.toLowerCase().includes("multipart/form-data")) {
           return badRequest("Content-Type must be multipart/form-data");
@@ -44,4 +44,3 @@ export const Route = createFileRoute("/api/upload")({
     },
   },
 });
-
