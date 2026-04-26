@@ -46,7 +46,7 @@ export async function ingestPdf(
     })),
   );
 
-  const embeddings = new OllamaEmbeddings({ model: "nomic-embed-text" });
+  const embeddings = new OllamaEmbeddings({ model: 'qwen3-embedding:0.6b' })
   const vectorStore = new MemoryVectorStore(embeddings);
 
   await vectorStore.addDocuments(chunkedDocuments);
