@@ -1,4 +1,4 @@
-import { Loader2, Paperclip, Plus, Send } from 'lucide-react'
+import { Clock3, Loader2, Moon, Paperclip, Plus, Send, Sun } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
@@ -33,8 +33,11 @@ type ChatSessionPageProps = {
   initialSessionId?: string | null
 }
 
+type ThemeMode = 'light' | 'dark'
+
 const SESSION_INDEX_KEY = 'edora.chat.sessions.v1'
 const SESSION_TRANSCRIPT_PREFIX = 'edora.chat.transcript.v1:'
+const THEME_KEY = 'edora.theme.v1'
 
 function parseChatStreamChunkLine(line: string): ChatStreamChunk | null {
   const trimmed = line.trim()
@@ -74,6 +77,19 @@ function parseChatStreamChunkLine(line: string): ChatStreamChunk | null {
 
 function canUseLocalStorage(): boolean {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+}
+
+function getInitialTheme(): ThemeMode {
+  if (!canUseLocalStorage()) {
+    return 'light'
+  }
+
+  const stored = window.localStorage.getItem(THEME_KEY)
+  if (stored === 'light' || stored === 'dark') {
+    return stored
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -148,7 +164,7 @@ function makeNewSessionMeta(sessionId: string, firstQuestion: string): ChatSessi
 
 export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProps) {
   const navigate = useNavigate()
-  const [routeSessionId, setRouteSessionId] = useState<string | null>(initialSessionId)
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme)
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId)
   const [question, setQuestion] = useState('')
   const [isSending, setIsSending] = useState(false)
@@ -175,14 +191,18 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
   }, [])
 
   useEffect(() => {
-    setRouteSessionId(initialSessionId)
+    setSessionId(initialSessionId)
   }, [initialSessionId])
 
   useEffect(() => {
-    if (routeSessionId !== sessionId && routeSessionId !== null) {
-      setSessionId(routeSessionId)
+    if (!canUseLocalStorage()) {
+      return
     }
-  }, [routeSessionId, sessionId])
+
+    window.localStorage.setItem(THEME_KEY, theme)
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    document.documentElement.style.colorScheme = theme
+  }, [theme])
 
   useEffect(() => {
     if (!sessionId) {
@@ -253,6 +273,10 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
     setUploadError(null)
     setHistory(readTranscript(nextSessionId))
     void navigate({ to: '/chat/$sessionId', params: { sessionId: nextSessionId } })
+  }
+
+  const toggleTheme = () => {
+    setTheme((current) => (current === 'dark' ? 'light' : 'dark'))
   }
 
   const handleUpload = async (file: File) => {
@@ -544,29 +568,43 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
   }
 
   const newChatLabel = hasSession ? 'New chat' : 'Start fresh'
+  const themeLabel = theme === 'dark' ? 'Light mode' : 'Dark mode'
 
   return (
-    <main className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 gap-6 px-6 py-8 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
+    <main className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 gap-6 bg-slate-100 px-6 py-8 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600">Edora</p>
-            <h2 className="mt-1 text-lg font-bold text-slate-900">Chat history</h2>
+            <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Edora</p>
+            <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Chat history</h2>
           </div>
 
-          <button
-            type="button"
-            onClick={clearActiveChat}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            <Plus className="h-4 w-4" />
-            {newChatLabel}
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              aria-label={themeLabel}
+              title={themeLabel}
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              <span className="hidden sm:inline">{themeLabel}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={clearActiveChat}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Plus className="h-4 w-4" />
+              {newChatLabel}
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 space-y-2">
           {sessions.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+            <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
               Your past chats will appear here after you ask a question.
             </p>
           ) : (
@@ -579,17 +617,19 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
                   onClick={() => handleSessionSelect(session.sessionId)}
                   className={`w-full rounded-xl border p-3 text-left transition ${
                     isActive
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-slate-200 bg-white hover:bg-slate-50'
+                      ? 'border-indigo-500 bg-indigo-50 dark:border-indigo-400 dark:bg-indigo-950/40'
+                      : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-slate-900">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
                       {session.firstQuestion || 'Untitled chat'}
                     </p>
-                    <Clock3 className="h-4 w-4 shrink-0 text-slate-400" />
+                    <Clock3 className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">{formatSessionTimestamp(session.timestamp)}</p>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    {formatSessionTimestamp(session.timestamp)}
+                  </p>
                 </button>
               )
             })
@@ -598,56 +638,65 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
       </aside>
 
       <div className="flex min-w-0 flex-col gap-6">
-        <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600">Edora</p>
-              <h1 className="mt-2 text-2xl font-bold text-slate-900">Learning chat</h1>
-              <p className="mt-1 text-sm text-slate-500">{sessionLabel}</p>
+              <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                Edora
+              </p>
+              <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">Learning chat</h1>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{sessionLabel}</p>
             </div>
-            <div className="text-right text-xs text-slate-500">
+            <div className="text-right text-xs text-slate-500 dark:text-slate-400">
               <p>{hasSession ? 'PDF uploaded' : 'Upload a PDF to enable chat'}</p>
-              {isUploading ? <p className="font-medium text-indigo-600">Uploading…</p> : null}
+              {isUploading ? <p className="font-medium text-indigo-600 dark:text-indigo-400">Uploading…</p> : null}
             </div>
           </div>
         </header>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Conversation</h2>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Conversation</h2>
 
           <div className="mt-4 max-h-[50vh] space-y-4 overflow-y-auto pr-2">
             {!hasMessages ? (
-              <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+              <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                 Upload a PDF, then ask your first question about it.
               </p>
             ) : null}
 
             {history.map((entry) => (
-              <article key={entry.id} className="space-y-3 rounded-xl border border-slate-200 p-4">
+              <article
+                key={entry.id}
+                className="space-y-3 rounded-xl border border-slate-200 p-4 transition-colors dark:border-slate-800"
+              >
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">You</p>
-                  <p className="mt-1 text-slate-900">{entry.question}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    You
+                  </p>
+                  <p className="mt-1 text-slate-900 dark:text-slate-100">{entry.question}</p>
                 </div>
 
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Edora</p>
-                  <p className="mt-1 whitespace-pre-wrap text-slate-800">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
+                    Edora
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-slate-800 dark:text-slate-200">
                     {entry.answer || (entry.isStreaming ? 'Thinking…' : '')}
                     {entry.isStreaming ? '▍' : ''}
                   </p>
-                  {entry.error ? <p className="mt-2 text-sm text-red-600">{entry.error}</p> : null}
+                  {entry.error ? <p className="mt-2 text-sm text-red-600 dark:text-red-400">{entry.error}</p> : null}
                 </div>
 
                 {entry.quiz && entry.quiz.length > 0 ? (
-                  <div className="rounded-lg bg-slate-50 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Quick quiz</p>
+                  <div className="rounded-lg bg-slate-50 p-4 transition-colors dark:bg-slate-800/60">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Quick quiz</p>
                     <div className="mt-3 space-y-4">
                       {entry.quiz.map((quizItem, quizIndex) => (
                         <div key={`${entry.id}-quiz-${quizIndex}`} className="space-y-2">
-                          <p className="font-medium text-slate-800">
+                          <p className="font-medium text-slate-800 dark:text-slate-200">
                             {quizIndex + 1}. {quizItem.question}
                           </p>
-                          <ol className="list-decimal space-y-1 pl-6 text-sm text-slate-700">
+                          <ol className="list-decimal space-y-1 pl-6 text-sm text-slate-700 dark:text-slate-300">
                             {quizItem.options.map((option, optionIndex) => (
                               <li key={`${entry.id}-quiz-${quizIndex}-option-${optionIndex}`}>
                                 {option}
@@ -664,8 +713,8 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Ask a question</h2>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Ask a question</h2>
 
           <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
             <input
@@ -676,12 +725,12 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
               onChange={handleFileChange}
             />
 
-            <div className="flex items-end gap-2 rounded-xl border border-slate-300 p-3 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200">
+            <div className="flex items-end gap-2 rounded-xl border border-slate-300 p-3 transition-colors focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 dark:border-slate-700 dark:focus-within:border-indigo-400 dark:focus-within:ring-indigo-900/50">
               <button
                 type="button"
                 onClick={handleUploadButtonClick}
                 disabled={isUploading}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                 aria-label="Upload PDF"
                 title={hasSession ? 'Upload a new PDF' : 'Upload a PDF'}
               >
@@ -701,13 +750,13 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
                   hasSession ? 'Ask a question about the uploaded PDF…' : 'Upload a PDF to unlock chat'
                 }
                 disabled={!hasSession || isUploading || isSending}
-                className="min-h-12 flex-1 resize-none border-0 bg-transparent p-0 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
+                className="min-h-12 flex-1 resize-none border-0 bg-transparent p-0 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed dark:text-slate-100 dark:placeholder:text-slate-500"
               />
 
               <button
                 type="submit"
                 disabled={!hasSession || isUploading || isSending || !question.trim()}
-                className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:disabled:bg-indigo-800"
               >
                 {isSending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -719,12 +768,12 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <p className={hasSession ? 'text-slate-500' : 'text-indigo-600'}>
+              <p className={hasSession ? 'text-slate-500 dark:text-slate-400' : 'text-indigo-600 dark:text-indigo-400'}>
                 {hasSession
                   ? 'Chat is ready. You can upload a different PDF anytime.'
                   : 'Choose a PDF to start chatting.'}
               </p>
-              <p className="text-slate-500">
+              <p className="text-slate-500 dark:text-slate-400">
                 {isUploading
                   ? 'Uploading PDF…'
                   : isSending
