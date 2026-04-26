@@ -1,4 +1,16 @@
-import { Clock3, Loader2, Moon, Paperclip, Plus, Send, Sun } from 'lucide-react'
+import {
+  BookOpenCheck,
+  BrainCircuit,
+  CircleHelp,
+  FileText,
+  Loader2,
+  Moon,
+  Plus,
+  Search,
+  Send,
+  Settings,
+  Sun,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
@@ -16,6 +28,7 @@ type ChatEntry = {
   quiz: QuizQuestion[] | null
   isStreaming: boolean
   error: string | null
+  createdAt?: number
 }
 
 type ChatStreamChunk =
@@ -80,13 +93,19 @@ function canUseLocalStorage(): boolean {
 }
 
 function getInitialTheme(): ThemeMode {
-  if (!canUseLocalStorage()) {
+  if (typeof window === 'undefined') {
     return 'light'
   }
 
-  const stored = window.localStorage.getItem(THEME_KEY)
-  if (stored === 'light' || stored === 'dark') {
-    return stored
+  if (canUseLocalStorage()) {
+    try {
+      const stored = window.localStorage.getItem(THEME_KEY)
+      if (stored === 'light' || stored === 'dark') {
+        return stored
+      }
+    } catch {
+      // Ignore storage access issues and use media preference fallback.
+    }
   }
 
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -154,6 +173,17 @@ function formatSessionTimestamp(timestamp: number): string {
   })
 }
 
+function formatMessageTimestamp(timestamp?: number): string {
+  if (typeof timestamp !== 'number') {
+    return ''
+  }
+
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 function makeNewSessionMeta(sessionId: string, firstQuestion: string): ChatSessionRecord {
   return {
     sessionId,
@@ -173,11 +203,15 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [history, setHistory] = useState<ChatEntry[]>([])
   const [sessions, setSessions] = useState<ChatSessionRecord[]>([])
+  const [sessionSearchQuery, setSessionSearchQuery] = useState('')
+  const [quizSelections, setQuizSelections] = useState<Record<string, number>>({})
   const activeRequestRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
 
   const hasMessages = history.length > 0
   const hasSession = Boolean(sessionId)
+  const hasConversation = hasSession && hasMessages
   const sessionLabel = useMemo(() => {
     if (!sessionId) {
       return 'Upload a PDF to start a session'
@@ -195,13 +229,18 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
   }, [initialSessionId])
 
   useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    document.documentElement.style.colorScheme = theme
+
     if (!canUseLocalStorage()) {
       return
     }
 
-    window.localStorage.setItem(THEME_KEY, theme)
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    document.documentElement.style.colorScheme = theme
+    try {
+      window.localStorage.setItem(THEME_KEY, theme)
+    } catch {
+      // Ignore storage access issues; theme still applies in-memory.
+    }
   }, [theme])
 
   useEffect(() => {
@@ -232,6 +271,15 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
     writeSessionIndex(sessions)
   }, [sessions])
 
+  const filteredSessions = useMemo(() => {
+    const query = sessionSearchQuery.trim().toLowerCase()
+    if (!query) {
+      return sessions
+    }
+
+    return sessions.filter((session) => session.firstQuestion.toLowerCase().includes(query))
+  }, [sessionSearchQuery, sessions])
+
   const updateHistoryEntry = (entryId: string, updater: (entry: ChatEntry) => ChatEntry) => {
     setHistory((prev) => prev.map((entry) => (entry.id === entryId ? updater(entry) : entry)))
   }
@@ -260,6 +308,7 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
     setSessionId(null)
     setQuestion('')
     setHistory([])
+    setQuizSelections({})
     setError(null)
     setUploadError(null)
     void navigate({ to: '/' })
@@ -272,6 +321,7 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
     setError(null)
     setUploadError(null)
     setHistory(readTranscript(nextSessionId))
+    setQuizSelections({})
     void navigate({ to: '/chat/$sessionId', params: { sessionId: nextSessionId } })
   }
 
@@ -302,6 +352,7 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
       setQuestion('')
       setError(null)
       setHistory([])
+      setQuizSelections({})
       activeRequestRef.current?.abort()
       setUploadError(null)
       void navigate({ to: '/chat/$sessionId', params: { sessionId: payload.sessionId } })
@@ -357,15 +408,16 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
     setError(null)
     setHistory((prev) => [
       ...prev,
-      {
-        id: entryId,
-        question: trimmedQuestion,
-        answer: '',
-        quiz: null,
-        isStreaming: true,
-        error: null,
-      },
-    ])
+        {
+          id: entryId,
+          question: trimmedQuestion,
+          answer: '',
+          quiz: null,
+          isStreaming: true,
+          error: null,
+          createdAt: Date.now(),
+        },
+      ])
 
     try {
       const response = await fetch('/api/chat', {
@@ -569,65 +621,75 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
 
   const newChatLabel = hasSession ? 'New chat' : 'Start fresh'
   const themeLabel = theme === 'dark' ? 'Light mode' : 'Dark mode'
+  const quickStarts = [
+    {
+      title: 'Explain a concept',
+      subtitle: 'Break it down with examples from my PDF.',
+      prompt: 'Explain the most important concept in this chapter with a simple example.',
+      icon: BrainCircuit,
+    },
+    {
+      title: 'Revision summary',
+      subtitle: 'Turn this chapter into a concise recap.',
+      prompt: 'Create a concise revision summary from this PDF with key formulas and definitions.',
+      icon: FileText,
+    },
+    {
+      title: 'Practice quiz',
+      subtitle: 'Generate a short test and explain answers.',
+      prompt: 'Generate a 5-question quiz from this PDF and explain each correct answer.',
+      icon: BookOpenCheck,
+    },
+  ]
 
   return (
-    <main className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 gap-6 bg-slate-100 px-6 py-8 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Edora</p>
-            <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Chat history</h2>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              aria-label={themeLabel}
-              title={themeLabel}
-            >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              <span className="hidden sm:inline">{themeLabel}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={clearActiveChat}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <Plus className="h-4 w-4" />
-              {newChatLabel}
-            </button>
-          </div>
+    <main className="min-h-screen bg-[var(--main-bg)] text-[var(--text-primary)] transition-colors">
+      <aside className="flex max-h-[42vh] flex-col border-b border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] px-4 py-5 text-[var(--sidebar-text)] transition-colors md:fixed md:inset-y-0 md:left-0 md:max-h-none md:w-[240px] md:border-b-0 md:border-r">
+        <div>
+          <h2 className="font-['Instrument_Serif',serif] text-[18px] font-medium tracking-[0.02em]">Edora</h2>
+          <p className="mt-1 text-[0.75rem] tracking-[0.06em] text-[var(--sidebar-muted)]">Study Chat</p>
+          <button
+            type="button"
+            onClick={clearActiveChat}
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-3 py-2 text-[0.75rem] font-medium uppercase tracking-[0.08em] text-white shadow-[0_8px_24px_rgba(108,99,255,0.28)] transition duration-150 hover:bg-[var(--accent-hover)] active:scale-[0.97]"
+          >
+            <Plus className="h-4 w-4" />
+            {newChatLabel}
+          </button>
         </div>
 
-        <div className="mt-5 space-y-2">
-          {sessions.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              Your past chats will appear here after you ask a question.
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-[var(--sidebar-panel-border)] bg-[var(--sidebar-panel-bg)] px-3 py-2 transition-colors">
+          <Search className="h-4 w-4 text-[var(--sidebar-muted)]" />
+          <input
+            value={sessionSearchQuery}
+            onChange={(event) => setSessionSearchQuery(event.currentTarget.value)}
+            placeholder="Search sessions"
+            className="w-full bg-transparent text-[0.8125rem] text-[var(--sidebar-text)] placeholder:text-[var(--sidebar-muted)] focus:outline-none"
+          />
+        </div>
+
+        <p className="mt-5 text-[0.75rem] font-medium uppercase tracking-[0.16em] text-[var(--sidebar-muted)]">Recent</p>
+        <div className="mt-2 flex-1 space-y-1 overflow-y-auto pr-1">
+          {filteredSessions.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[var(--sidebar-empty-border)] px-3 py-2 text-[0.8125rem] text-[var(--sidebar-muted)]">
+              No sessions yet.
             </p>
           ) : (
-            sessions.map((session) => {
+            filteredSessions.map((session) => {
               const isActive = session.sessionId === sessionId
               return (
                 <button
                   key={session.sessionId}
                   type="button"
                   onClick={() => handleSessionSelect(session.sessionId)}
-                  className={`w-full rounded-xl border p-3 text-left transition ${
+                  className={`w-full rounded-lg px-3 py-2 text-left transition duration-150 ${
                     isActive
-                      ? 'border-indigo-500 bg-indigo-50 dark:border-indigo-400 dark:bg-indigo-950/40'
-                      : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800'
+                      ? 'bg-[var(--accent)] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]'
+                      : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)]'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {session.firstQuestion || 'Untitled chat'}
-                    </p>
-                    <Clock3 className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="truncate text-[0.8125rem] font-medium">{session.firstQuestion || 'Untitled session'}</p>
+                  <p className="mt-1 text-[0.75rem] text-[var(--sidebar-muted)]">
                     {formatSessionTimestamp(session.timestamp)}
                   </p>
                 </button>
@@ -635,88 +697,174 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
             })
           )}
         </div>
+
+        <div className="mt-4 border-t border-[var(--sidebar-divider)] pt-3 text-[0.8125rem] text-[var(--sidebar-muted)]">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-2 transition hover:bg-[var(--sidebar-hover-bg)]"
+            aria-label={themeLabel}
+            title={themeLabel}
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {themeLabel}
+          </button>
+          <div className="mt-1 flex items-center gap-2 rounded-lg px-2 py-2">
+            <Settings className="h-4 w-4" />
+            Settings
+          </div>
+          <div className="flex items-center gap-2 rounded-lg px-2 py-2">
+            <CircleHelp className="h-4 w-4" />
+            Help
+          </div>
+        </div>
       </aside>
 
-      <div className="flex min-w-0 flex-col gap-6">
-        <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                Edora
-              </p>
-              <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">Learning chat</h1>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{sessionLabel}</p>
-            </div>
-            <div className="text-right text-xs text-slate-500 dark:text-slate-400">
-              <p>{hasSession ? 'PDF uploaded' : 'Upload a PDF to enable chat'}</p>
-              {isUploading ? <p className="font-medium text-indigo-600 dark:text-indigo-400">Uploading…</p> : null}
-            </div>
-          </div>
+      <div className="flex min-h-screen flex-col md:pl-[240px]">
+        <header className="border-b border-[var(--border)] bg-[var(--main-bg)]/95 px-6 py-5 backdrop-blur-md">
+          <p className="text-[0.75rem] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Session</p>
+          <h1 className="mt-1 font-['Instrument_Serif',serif] text-[1.5rem] font-medium leading-tight">{sessionLabel}</h1>
         </header>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Conversation</h2>
-
-          <div className="mt-4 max-h-[50vh] space-y-4 overflow-y-auto pr-2">
-            {!hasMessages ? (
-              <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Upload a PDF, then ask your first question about it.
-              </p>
-            ) : null}
-
-            {history.map((entry) => (
-              <article
-                key={entry.id}
-                className="space-y-3 rounded-xl border border-slate-200 p-4 transition-colors dark:border-slate-800"
+        <section className="flex-1 overflow-y-auto px-6 py-8">
+          {!hasConversation ? (
+            <div className="mx-auto flex min-h-[56vh] w-full max-w-3xl flex-col items-center justify-center text-center">
+              <h2
+                className="animate-[fade-up_400ms_ease-out_forwards] text-[2.5rem] font-medium leading-tight opacity-0 font-['Instrument_Serif',serif]"
+                style={{ animationDelay: '0ms' }}
               >
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    You
-                  </p>
-                  <p className="mt-1 text-slate-900 dark:text-slate-100">{entry.question}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
-                    Edora
-                  </p>
-                  <p className="mt-1 whitespace-pre-wrap text-slate-800 dark:text-slate-200">
-                    {entry.answer || (entry.isStreaming ? 'Thinking…' : '')}
-                    {entry.isStreaming ? '▍' : ''}
-                  </p>
-                  {entry.error ? <p className="mt-2 text-sm text-red-600 dark:text-red-400">{entry.error}</p> : null}
-                </div>
-
-                {entry.quiz && entry.quiz.length > 0 ? (
-                  <div className="rounded-lg bg-slate-50 p-4 transition-colors dark:bg-slate-800/60">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Quick quiz</p>
-                    <div className="mt-3 space-y-4">
-                      {entry.quiz.map((quizItem, quizIndex) => (
-                        <div key={`${entry.id}-quiz-${quizIndex}`} className="space-y-2">
-                          <p className="font-medium text-slate-800 dark:text-slate-200">
-                            {quizIndex + 1}. {quizItem.question}
-                          </p>
-                          <ol className="list-decimal space-y-1 pl-6 text-sm text-slate-700 dark:text-slate-300">
-                            {quizItem.options.map((option, optionIndex) => (
-                              <li key={`${entry.id}-quiz-${quizIndex}-option-${optionIndex}`}>
-                                {option}
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      ))}
+                Study smarter with Edora
+              </h2>
+              <p
+                className="mt-3 max-w-2xl animate-[fade-up_400ms_ease-out_forwards] text-[0.9375rem] text-[var(--text-muted)] opacity-0"
+                style={{ animationDelay: '100ms' }}
+              >
+                Upload a chapter PDF and ask focused questions, generate revision summaries, and test yourself with
+                instant quizzes.
+              </p>
+              <div
+                className="mt-7 grid w-full gap-3 sm:grid-cols-3 animate-[fade-up_400ms_ease-out_forwards] opacity-0"
+                style={{ animationDelay: '200ms' }}
+              >
+                {quickStarts.map((card) => (
+                  <button
+                    key={card.title}
+                    type="button"
+                    onClick={() => {
+                      setQuestion(card.prompt)
+                      questionInputRef.current?.focus()
+                    }}
+                    className="group rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-4 text-left shadow-[var(--shadow-sm)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]"
+                  >
+                    <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]">
+                      <card.icon className="h-4 w-4" />
+                    </div>
+                    <p className="text-[1.125rem] font-semibold leading-snug">{card.title}</p>
+                    <p className="mt-2 text-[0.8125rem] text-[var(--text-muted)]">{card.subtitle}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mx-auto w-full max-w-3xl space-y-8">
+              {history.map((entry, index) => (
+                <article
+                  key={entry.id}
+                  className="space-y-4 animate-[fade-up_150ms_ease-out_forwards] opacity-0"
+                  style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
+                >
+                  <div className="flex items-start justify-end gap-3">
+                    <div className="max-w-[80%]">
+                      <div className="rounded-2xl rounded-br-md bg-[var(--accent-soft)] px-4 py-3 text-[0.9375rem] leading-relaxed text-[var(--text-primary)] shadow-[0_2px_10px_rgba(15,15,15,0.05)]">
+                        {entry.question}
+                      </div>
+                      <p className="mt-1 text-right text-[0.8125rem] text-[var(--text-subtle)]">
+                        {formatMessageTimestamp(entry.createdAt)}
+                      </p>
+                    </div>
+                    <div className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--hover-bg)] text-[0.6875rem] font-semibold text-[var(--text-muted)]">
+                      You
                     </div>
                   </div>
-                ) : null}
-              </article>
-            ))}
-          </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-[0.75rem] font-semibold text-white">
+                      E
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="whitespace-pre-wrap text-[0.9375rem] leading-relaxed">
+                        {entry.answer || (entry.isStreaming ? 'Thinking…' : '')}
+                        {entry.isStreaming ? '▍' : ''}
+                      </p>
+                      <p className="mt-1 text-[0.8125rem] text-[var(--text-subtle)]">
+                        {formatMessageTimestamp(entry.createdAt)}
+                      </p>
+                      {entry.error ? <p className="mt-2 text-[0.8125rem] text-[var(--error)]">{entry.error}</p> : null}
+                    </div>
+                  </div>
+
+                  {entry.quiz && entry.quiz.length > 0 ? (
+                    <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-[var(--shadow-sm)]">
+                      <p className="text-[1.125rem] font-semibold">Quick quiz</p>
+                      {entry.quiz.map((quizItem, quizIndex) => {
+                        const selectionKey = `${entry.id}:${quizIndex}`
+                        const selectedOption = quizSelections[selectionKey]
+                        const hasAnswered = typeof selectedOption === 'number'
+
+                        return (
+                          <div key={selectionKey} className="rounded-xl border border-[var(--border-subtle)] p-4">
+                            <p className="text-[1.125rem] font-semibold leading-snug">{quizItem.question}</p>
+                            <div className="mt-3 space-y-2">
+                              {quizItem.options.map((option, optionIndex) => {
+                                const isCorrect = optionIndex === quizItem.correctIndex
+                                const isSelected = optionIndex === selectedOption
+
+                                let optionClassName =
+                                  'border-[var(--border)] hover:bg-[var(--hover-bg)] text-[var(--text-primary)]'
+                                if (hasAnswered && isCorrect) {
+                                  optionClassName =
+                                    'border-[color:var(--success)/0.45] bg-[color:var(--success)/0.12] text-[color:var(--success)]'
+                                } else if (hasAnswered && isSelected && !isCorrect) {
+                                  optionClassName =
+                                    'border-[color:var(--error)/0.45] bg-[color:var(--error)/0.1] text-[color:var(--error)]'
+                                }
+
+                                return (
+                                  <button
+                                    key={`${selectionKey}:${optionIndex}`}
+                                    type="button"
+                                    disabled={hasAnswered}
+                                    onClick={() =>
+                                      setQuizSelections((current) => ({
+                                        ...current,
+                                        [selectionKey]: optionIndex,
+                                      }))
+                                    }
+                                    className={`w-full rounded-lg border px-3 py-2 text-left text-[0.9375rem] transition ${optionClassName}`}
+                                  >
+                                    {option}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            {hasAnswered ? (
+                              <p className="mt-3 border-l-2 border-[var(--accent)] pl-3 text-[0.8125rem] text-[var(--text-muted)]">
+                                {quizItem.explanation}
+                              </p>
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Ask a question</h2>
-
-          <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+        <footer className="sticky bottom-0 border-t border-[var(--border)] bg-[var(--main-bg)]/95 px-6 py-4 backdrop-blur-md">
+          <form className="mx-auto w-full max-w-3xl space-y-2" onSubmit={handleSubmit}>
             <input
               ref={fileInputRef}
               type="file"
@@ -725,72 +873,48 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
               onChange={handleFileChange}
             />
 
-            <div className="flex items-end gap-2 rounded-xl border border-slate-300 p-3 transition-colors focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 dark:border-slate-700 dark:focus-within:border-indigo-400 dark:focus-within:ring-indigo-900/50">
+            <div className="flex items-end gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-2 shadow-[var(--shadow-sm)] transition duration-200 focus-within:border-[var(--accent)] focus-within:shadow-[var(--shadow-md)]">
               <button
                 type="button"
                 onClick={handleUploadButtonClick}
                 disabled={isUploading}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--text-muted)] transition hover:bg-[var(--hover-bg)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Upload PDF"
                 title={hasSession ? 'Upload a new PDF' : 'Upload a PDF'}
               >
-                {isUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Paperclip className="h-4 w-4" />
-                )}
+                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               </button>
 
               <textarea
+                ref={questionInputRef}
                 id="question-input"
                 value={question}
                 onChange={(event) => setQuestion(event.currentTarget.value)}
-                rows={3}
-                placeholder={
-                  hasSession ? 'Ask a question about the uploaded PDF…' : 'Upload a PDF to unlock chat'
-                }
+                rows={2}
+                placeholder={hasSession ? 'Ask anything from your PDF…' : 'Upload a PDF to unlock chat'}
                 disabled={!hasSession || isUploading || isSending}
-                className="min-h-12 flex-1 resize-none border-0 bg-transparent p-0 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed dark:text-slate-100 dark:placeholder:text-slate-500"
+                className="min-h-12 flex-1 resize-none border-0 bg-transparent px-1 py-2 text-[0.9375rem] placeholder:text-[var(--text-subtle)] focus:outline-none disabled:cursor-not-allowed"
               />
 
               <button
                 type="submit"
                 disabled={!hasSession || isUploading || isSending || !question.trim()}
-                className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:disabled:bg-indigo-800"
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-[0.75rem] font-medium uppercase tracking-[0.12em] text-white shadow-[0_6px_20px_rgba(108,99,255,0.28)] transition duration-150 hover:bg-[var(--accent-hover)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55"
               >
-                {isSending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-                <span className="ml-2">{isSending ? 'Sending…' : 'Send'}</span>
+                {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {isSending ? 'Sending' : 'Send'}
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <p className={hasSession ? 'text-slate-500 dark:text-slate-400' : 'text-indigo-600 dark:text-indigo-400'}>
-                {hasSession
-                  ? 'Chat is ready. You can upload a different PDF anytime.'
-                  : 'Choose a PDF to start chatting.'}
-              </p>
-              <p className="text-slate-500 dark:text-slate-400">
-                {isUploading
-                  ? 'Uploading PDF…'
-                  : isSending
-                    ? 'Streaming answer…'
-                    : uploadError
-                      ? uploadError
-                      : error ?? ''}
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[0.8125rem] text-[var(--text-muted)]">
+              <p>{hasSession ? 'PDF ready for chat.' : 'Choose a PDF to start.'}</p>
+              <p>{isUploading ? 'Uploading…' : isSending ? 'Streaming…' : uploadError || error || ''}</p>
             </div>
           </form>
-        </section>
+        </footer>
       </div>
     </main>
   )
 }
 
 export {}
-
-
-
