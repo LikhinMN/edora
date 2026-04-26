@@ -13,6 +13,10 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
+import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { useNavigate } from '@tanstack/react-router'
 import type { QuizQuestion } from './types'
 
@@ -792,10 +796,16 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
                       E
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="whitespace-pre-wrap text-[0.9375rem] leading-relaxed">
-                        {entry.answer || (entry.isStreaming ? 'Thinking…' : '')}
-                        {entry.isStreaming ? '▍' : ''}
-                      </p>
+                      <div className="markdown-content text-[0.9375rem] leading-relaxed">
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {entry.answer || (entry.isStreaming ? 'Thinking…' : '')}
+                        </ReactMarkdown>
+                        {entry.isStreaming ? (
+                          <span aria-hidden="true" className="ml-0.5 inline-block text-[var(--text-subtle)]">
+                            ▍
+                          </span>
+                        ) : null}
+                      </div>
                       <p className="mt-1 text-[0.8125rem] text-[var(--text-subtle)]">
                         {formatMessageTimestamp(entry.createdAt)}
                       </p>
