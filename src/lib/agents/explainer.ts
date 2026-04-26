@@ -1,4 +1,5 @@
 import { ChatOllama } from "@langchain/ollama";
+import type { Runtime } from "@langchain/langgraph";
 import type { EdoraState } from "../types";
 
 const DEFAULT_CONTEXT_ITEMS = 10;
@@ -84,7 +85,10 @@ export function normalizeResponseContent(content: unknown): string {
   return "";
 }
 
-export async function explainer(state: EdoraState): Promise<EdoraState> {
+export async function explainer(
+  state: EdoraState,
+  runtime: Runtime,
+): Promise<EdoraState> {
   const question = state.question.trim();
   if (!question) {
     return {
@@ -97,8 +101,20 @@ export async function explainer(state: EdoraState): Promise<EdoraState> {
   const prompt = buildExplainerPrompt(state, context);
 
   try {
-    const response = await llm.invoke(prompt);
-    const answer = normalizeResponseContent(response.content);
+    const responseStream = await llm.stream(prompt);
+    let answer = "";
+
+    for await (const chunk of responseStream) {
+      const token = normalizeResponseContent((chunk as { content?: unknown }).content);
+      if (!token) {
+        continue;
+      }
+
+      answer += token;
+      runtime.writer(token);
+    }
+
+    answer = answer.trim();
 
     if (answer) {
       return {
