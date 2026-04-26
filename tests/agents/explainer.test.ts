@@ -59,19 +59,18 @@ describe("getTeachingGradeLevel", () => {
 });
 
 describe("normalizeResponseContent", () => {
-  it("normalizes string content", () => {
-    expect(normalizeResponseContent("  hello  ")).toBe("hello");
+  it("preserves whitespace in string content", () => {
+    expect(normalizeResponseContent("  hello  ")).toBe("  hello  ");
   });
 
-  it("normalizes array content", () => {
+  it("joins array content without injecting separators", () => {
     const value = normalizeResponseContent([
-      { text: "Line 1" },
-      "Line 2",
-      { text: "Line 3" },
+      { text: "Hello" },
+      " ",
+      { text: "world" },
+      "!",
     ]);
 
-    expect(value).toContain("Line 1");
-    expect(value).toContain("Line 2");
-    expect(value).toContain("Line 3");
+    expect(value).toBe("Hello world!");
   });
 });

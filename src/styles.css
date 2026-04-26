@@ -15,6 +15,7 @@
 
   --accent: #6c63ff;
   --accent-soft: #ede9ff;
+  --accent-soft-text: #1f1b44;
   --accent-hover: #5b52e0;
 
   --text-primary: #0f0f0f;
@@ -46,6 +47,8 @@
   --main-bg: #141414;
   --card-bg: #1c1c1c;
   --hover-bg: #242424;
+  --accent-soft: #2a254e;
+  --accent-soft-text: #ecebff;
   --text-primary: #f5f5f5;
   --text-muted: #a3a3a3;
   --text-subtle: #71717a;

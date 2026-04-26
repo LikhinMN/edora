@@ -57,7 +57,7 @@ export function buildExplainerPrompt(state: EdoraState, context: string): string
 
 export function normalizeResponseContent(content: unknown): string {
   if (typeof content === "string") {
-    return content.trim();
+    return content;
   }
 
   if (Array.isArray(content)) {
@@ -78,8 +78,7 @@ export function normalizeResponseContent(content: unknown): string {
 
         return "";
       })
-      .join("\n")
-      .trim();
+      .join("");
   }
 
   return "";
@@ -135,4 +134,3 @@ export async function explainer(
 
 export const explainerNode = explainer;
 void explainerNode;
-

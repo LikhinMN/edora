@@ -775,7 +775,7 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
                 >
                   <div className="flex items-start justify-end gap-3">
                     <div className="max-w-[80%]">
-                      <div className="rounded-2xl rounded-br-md bg-[var(--accent-soft)] px-4 py-3 text-[0.9375rem] leading-relaxed text-[var(--text-primary)] shadow-[0_2px_10px_rgba(15,15,15,0.05)]">
+                      <div className="rounded-2xl rounded-br-md bg-[var(--accent-soft)] px-4 py-3 text-[0.9375rem] leading-relaxed text-[var(--accent-soft-text)] shadow-[0_2px_10px_rgba(15,15,15,0.05)]">
                         {entry.question}
                       </div>
                       <p className="mt-1 text-right text-[0.8125rem] text-[var(--text-subtle)]">
