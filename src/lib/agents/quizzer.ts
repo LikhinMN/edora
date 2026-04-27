@@ -45,6 +45,7 @@ export function buildQuizzerPrompt(state: EdoraState): string {
     "Each question must have exactly 4 options.",
     "correctIndex must be a zero-based integer from 0 to 3.",
     "Use simple language and keep explanations brief.",
+    "If you include LaTeX in JSON strings, escape backslashes (example: \\\"\\\\\\\\frac{a}{b}\\\").",
     "Return only valid JSON with this exact shape:",
     '{"quiz":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}]}',
     "",

@@ -55,6 +55,8 @@ type ThemeMode = 'light' | 'dark'
 const SESSION_INDEX_KEY = 'edora.chat.sessions.v1'
 const SESSION_TRANSCRIPT_PREFIX = 'edora.chat.transcript.v1:'
 const THEME_KEY = 'edora.theme.v1'
+const markdownRemarkPlugins = [remarkGfm, remarkMath]
+const markdownRehypePlugins = [rehypeKatex]
 
 function parseChatStreamChunkLine(line: string): ChatStreamChunk | null {
   const trimmed = line.trim()
@@ -797,7 +799,7 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="markdown-content text-[0.9375rem] leading-relaxed">
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                        <ReactMarkdown remarkPlugins={markdownRemarkPlugins} rehypePlugins={markdownRehypePlugins}>
                           {entry.answer || (entry.isStreaming ? 'Thinking…' : '')}
                         </ReactMarkdown>
                         {entry.isStreaming ? (
@@ -823,7 +825,14 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
 
                         return (
                           <div key={selectionKey} className="rounded-xl border border-[var(--border-subtle)] p-4">
-                            <p className="text-[1.125rem] font-semibold leading-snug">{quizItem.question}</p>
+                            <div className="markdown-content text-[1.125rem] font-semibold leading-snug">
+                              <ReactMarkdown
+                                remarkPlugins={markdownRemarkPlugins}
+                                rehypePlugins={markdownRehypePlugins}
+                              >
+                                {quizItem.question}
+                              </ReactMarkdown>
+                            </div>
                             <div className="mt-3 space-y-2">
                               {quizItem.options.map((option, optionIndex) => {
                                 const isCorrect = optionIndex === quizItem.correctIndex
@@ -852,15 +861,26 @@ export function ChatSessionPage({ initialSessionId = null }: ChatSessionPageProp
                                     }
                                     className={`w-full rounded-lg border px-3 py-2 text-left text-[0.9375rem] transition ${optionClassName}`}
                                   >
-                                    {option}
+                                    <ReactMarkdown
+                                      remarkPlugins={markdownRemarkPlugins}
+                                      rehypePlugins={markdownRehypePlugins}
+                                      components={{ p: ({ children }) => <span>{children}</span> }}
+                                    >
+                                      {option}
+                                    </ReactMarkdown>
                                   </button>
                                 )
                               })}
                             </div>
                             {hasAnswered ? (
-                              <p className="mt-3 border-l-2 border-[var(--accent)] pl-3 text-[0.8125rem] text-[var(--text-muted)]">
-                                {quizItem.explanation}
-                              </p>
+                              <div className="markdown-content mt-3 border-l-2 border-[var(--accent)] pl-3 text-[0.8125rem] text-[var(--text-muted)]">
+                                <ReactMarkdown
+                                  remarkPlugins={markdownRemarkPlugins}
+                                  rehypePlugins={markdownRehypePlugins}
+                                >
+                                  {quizItem.explanation}
+                                </ReactMarkdown>
+                              </div>
                             ) : null}
                           </div>
                         )
